@@ -1,4 +1,4 @@
-LOAD R1 4
+LOAD R1 @0
 LOAD R2 1
 LOAD R3 1 //Result
 
