@@ -1,4 +1,5 @@
 from interpreter import BasicASMInterpreter
+from debugger import BasicASMDebugger
 import argparse
 import json
 
@@ -21,43 +22,13 @@ def main():
     if args.memory:
         interpreter.initialize_memory_from_file(args.memory)
 
-    if args.breakpoints:
-        for bp in args.breakpoints:
-            interpreter.set_breakpoint(bp)
-
     if args.debug:
-        while True:
-            command = input().strip().split()
-            if not command:
-                continue
-
-            if command[0] == "s":
-                if not interpreter.execute_step():
-                    print(json.dumps({"status": "ended"}))
-                    break
-                print(interpreter.get_state_json())
-            elif command[0] == "c":
-                if not interpreter.run_until_breakpoint():
-                    print(json.dumps({"status": "ended"}))
-                    break
-                print(interpreter.get_state_json())
-            elif command[0] == "b" and len(command) > 1:
-                interpreter.set_breakpoint(int(command[1]))
-                print(json.dumps({"status": "breakpoint_set", "line": int(command[1])}))
-            elif command[0] == "r" and len(command) > 1:
-                interpreter.remove_breakpoint(int(command[1]))
-                print(
-                    json.dumps(
-                        {"status": "breakpoint_removed", "line": int(command[1])}
-                    )
-                )
-            elif command[0] == "p":
-                print(interpreter.get_state_json())
-            elif command[0] == "q":
-                print(json.dumps({"status": "quit"}))
-                break
-            else:
-                print(json.dumps({"status": "error", "message": "Unknown command"}))
+        debugger = BasicASMDebugger(interpreter)
+        if args.breakpoints:
+            for bp in args.breakpoints:
+                debugger.set_breakpoint(bp)
+        debugger.run()
+        print(interpreter.get_state_json())
     else:
         interpreter.execute()
         print(interpreter.get_state_json())

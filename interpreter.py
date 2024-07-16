@@ -13,12 +13,11 @@ class BasicASMInterpreter:
         self.instructions = []
         self.comparison_flag = None
 
+    ### Parser
     def parse(self, code):
         lines = code.strip().split("\n")
         for line in lines:
             line = line.strip()
-            if not line or line.startswith("//"):
-                continue
             if "//" in line:
                 line = line.split("//")[0]
 
@@ -31,6 +30,8 @@ class BasicASMInterpreter:
                 line = line.replace(",", "")
                 self.instructions.append(line.split())
 
+    ### Execution Control
+
     def execute_step(self):
         if self.program_counter >= len(self.instructions):
             return False
@@ -38,31 +39,6 @@ class BasicASMInterpreter:
         instruction = self.instructions[self.program_counter]
         self.execute_instruction(instruction)
         return True
-
-    def run_until_breakpoint(self):
-        while self.program_counter < len(self.instructions):
-            if self.program_counter in self.breakpoints:
-                return True
-
-            if not self.execute_step():
-                return False
-
-        return False
-
-    def set_breakpoint(self, line_number):
-        self.breakpoints.add(line_number)
-
-    def remove_breakpoint(self, line_number):
-        self.breakpoints.discard(line_number)
-
-    def get_state(self):
-        return {
-            "program_counter": self.program_counter,
-            "registers": self.registers,
-            "memory": self.memory[:10],
-            "stack": self.stack,
-            "comparison_flag": self.comparison_flag,
-        }
 
     def execute(self):
         while self.execute_step():
@@ -92,6 +68,8 @@ class BasicASMInterpreter:
             self.program_counter += 1
 
         return jump_occurred
+
+    ### Instructions implementation
 
     def load(self, register, value):
         self.write_register(register, self.get_value(value))
@@ -198,6 +176,8 @@ class BasicASMInterpreter:
         else:
             raise ValueError(f"Invalid destination: {operand}")
 
+    ### Program Initialization
+
     def load_program_from_file(self, filename):
         if not os.path.exists(filename):
             raise FileNotFoundError(f"The file {filename} does not exist.")
@@ -207,22 +187,6 @@ class BasicASMInterpreter:
 
         self.parse(code)
         print(f"Program loaded from {filename}")
-
-    def get_state_json(self):
-        return json.dumps(
-            {
-                "program_counter": self.program_counter,
-                "registers": self.registers,
-                "memory": self.memory,
-                "stack": self.stack,
-                "comparison_flag": self.comparison_flag,
-                "current_instruction": (
-                    " ".join(self.instructions[self.program_counter])
-                    if self.program_counter < len(self.instructions)
-                    else "END"
-                ),
-            }
-        )
 
     def initialize_memory_from_file(self, filename):
         if not os.path.exists(filename):
@@ -242,3 +206,20 @@ class BasicASMInterpreter:
                     break
 
         print(f"Memory initialized from {filename}")
+
+    ### State Reporting
+    def get_state_json(self):
+        return json.dumps(
+            {
+                "program_counter": self.program_counter,
+                "registers": self.registers,
+                "memory": self.memory,
+                "stack": self.stack,
+                "comparison_flag": self.comparison_flag,
+                "current_instruction": (
+                    " ".join(self.instructions[self.program_counter])
+                    if self.program_counter < len(self.instructions)
+                    else "END"
+                ),
+            }
+        )
