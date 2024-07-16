@@ -1,13 +1,13 @@
 import os
 import json
-import argparse
 
 
 class BasicASMInterpreter:
     def __init__(self):
-        self.memory = [0] * 1000
+        self.memory = [0] * 100
         self.registers = {"R1": 0, "R2": 0, "R3": 0, "R4": 0}
         self.stack = []
+        self.stack_size = 1000
         self.program_counter = 0
         self.labels = {}
         self.instructions = []
@@ -36,11 +36,7 @@ class BasicASMInterpreter:
             return False
 
         instruction = self.instructions[self.program_counter]
-        print(f"Executing: {' '.join(instruction)}, PC: {self.program_counter}")
         self.execute_instruction(instruction)
-        print(
-            f"After execution: PC: {self.program_counter}, Registers: {self.registers}, Flag: {self.comparison_flag}"
-        )
         return True
 
     def run_until_breakpoint(self):
@@ -98,7 +94,7 @@ class BasicASMInterpreter:
         return jump_occurred
 
     def load(self, register, value):
-        self.registers[register] = self.get_value(value)
+        self.write_register(register, self.get_value(value))
 
     def store(self, register, value):
         self.set_value(value, self.registers[register])
@@ -120,7 +116,7 @@ class BasicASMInterpreter:
 
     def compare(self, reg1, reg2):
         val1 = self.registers[reg1]
-        val2 = self.registers[reg2]
+        val2 = self.get_value(reg2)
         if val1 < val2:
             self.comparison_flag = "L"
         elif val1 > val2:
@@ -141,12 +137,14 @@ class BasicASMInterpreter:
 
         if should_jump:
             if label not in self.labels:
-                raise ValueError(f"Undefined label: {label}")
+                raise IndexError(f"Undefined label: {label}")
             self.program_counter = self.labels[label]
             return True
         return False
 
     def push(self, register):
+        if len(self.stack) >= self.stack_size:
+            raise IndexError("Stack overflow")
         self.stack.append(self.registers[register])
 
     def pop(self, register):
@@ -154,23 +152,49 @@ class BasicASMInterpreter:
             raise ValueError("Stack underflow")
         self.registers[register] = self.stack.pop()
 
+    def read_from_memory(self, address):
+        if address < 0 or address >= len(self.memory):
+            raise IndexError(f"Memory access out of bounds: {address}")
+        return self.memory[address]
+
+    def read_register(self, register):
+        if register not in self.registers:
+            raise KeyError(f"Invalid register: {register}")
+        return self.registers[register]
+
     def get_value(self, operand):
         if operand.startswith("@R"):
-            return self.memory[self.registers[operand[1:]]]
-        elif operand.startswith("@"):
-            return self.memory[int(operand[1:])]
+            register = operand[1:]
+            address = self.read_register(register)
+            return self.read_from_memory(address)
         elif operand.startswith("R"):
-            return self.registers[operand]
+            return self.read_register(operand)
+        elif operand.startswith("@"):
+            address = int(operand[1:])
+            return self.read_from_memory(address)
         else:
             return int(operand)
 
+    def write_memory(self, address, value):
+        if address < 0 or address >= len(self.memory):
+            raise IndexError(f"Memory access out of bounds: {address}")
+        self.memory[address] = value
+
+    def write_register(self, register, value):
+        if register not in self.registers:
+            raise KeyError(f"Invalid register: {register}")
+        self.registers[register] = value
+
     def set_value(self, operand, value):
         if operand.startswith("@R"):
-            self.memory[self.registers[operand[1:]]] = value
+            register = operand[1:]
+            address = self.read_register(register)
+            self.write_memory(address, value)
         elif operand.startswith("@"):
-            self.memory[int(operand[1:])] = value
+            address = int(operand[1:])
+            self.write_memory(address, value)
         elif operand.startswith("R"):
-            self.registers[operand] = value
+            self.write_register(operand, value)
         else:
             raise ValueError(f"Invalid destination: {operand}")
 
@@ -218,67 +242,3 @@ class BasicASMInterpreter:
                     break
 
         print(f"Memory initialized from {filename}")
-
-
-def main():
-    parser = argparse.ArgumentParser(description="BasicASM Interpreter")
-    parser.add_argument("filename", help="The BasicASM file to execute")
-    parser.add_argument("-d", "--debug", action="store_true", help="Run in debug mode")
-    parser.add_argument(
-        "-b", "--breakpoints", type=int, nargs="*", help="Set initial breakpoints"
-    )
-    parser.add_argument("-m", "--memory", help="File to initialize memory from")
-
-    args = parser.parse_args()
-
-    interpreter = BasicASMInterpreter()
-
-    interpreter.load_program_from_file(args.filename)
-
-    if args.memory:
-        interpreter.initialize_memory_from_file(args.memory)
-
-    if args.breakpoints:
-        for bp in args.breakpoints:
-            interpreter.set_breakpoint(bp)
-
-    if args.debug:
-        while True:
-            command = input().strip().split()
-            if not command:
-                continue
-
-            if command[0] == "s":
-                if not interpreter.execute_step():
-                    print(json.dumps({"status": "ended"}))
-                    break
-                print(interpreter.get_state_json())
-            elif command[0] == "c":
-                if not interpreter.run_until_breakpoint():
-                    print(json.dumps({"status": "ended"}))
-                    break
-                print(interpreter.get_state_json())
-            elif command[0] == "b" and len(command) > 1:
-                interpreter.set_breakpoint(int(command[1]))
-                print(json.dumps({"status": "breakpoint_set", "line": int(command[1])}))
-            elif command[0] == "r" and len(command) > 1:
-                interpreter.remove_breakpoint(int(command[1]))
-                print(
-                    json.dumps(
-                        {"status": "breakpoint_removed", "line": int(command[1])}
-                    )
-                )
-            elif command[0] == "p":
-                print(interpreter.get_state_json())
-            elif command[0] == "q":
-                print(json.dumps({"status": "quit"}))
-                break
-            else:
-                print(json.dumps({"status": "error", "message": "Unknown command"}))
-    else:
-        interpreter.execute()
-        print(interpreter.get_state_json())
-
-
-if __name__ == "__main__":
-    main()
